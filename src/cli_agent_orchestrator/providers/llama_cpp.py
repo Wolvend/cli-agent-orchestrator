@@ -24,7 +24,9 @@ IDLE_PROMPT_PATTERN = r"^>\s*$"
 IDLE_PROMPT_AT_END_PATTERN = rf"(?:{IDLE_PROMPT_PATTERN})\s*\Z"
 USER_PROMPT_WITH_TEXT_PATTERN = r"^>\s+\S.+$"
 
-ERROR_PATTERN = r"^(?:Error:|Failed to load the model|invalid argument:|terminate called|Segmentation fault)\b"
+ERROR_PATTERN = (
+    r"^(?:Error:|Failed to load the model|invalid argument:|terminate called|Segmentation fault)\b"
+)
 
 
 class LlamaCppProvider(BaseProvider):
@@ -138,7 +140,9 @@ class LlamaCppProvider(BaseProvider):
         if not wait_until_status(
             self, TerminalStatus.IDLE, timeout=init_timeout_s, polling_interval=2.0
         ):
-            raise TimeoutError(f"llama-cli initialization timed out after {init_timeout_s:g} seconds")
+            raise TimeoutError(
+                f"llama-cli initialization timed out after {init_timeout_s:g} seconds"
+            )
 
         self._initialized = True
         return True

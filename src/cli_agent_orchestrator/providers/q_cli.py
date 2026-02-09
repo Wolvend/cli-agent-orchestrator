@@ -38,6 +38,7 @@ LOGIN_PROMPT_PATTERN = (
     r"press enter to continue|press enter|esc to cancel)"
 )
 
+
 def _redact_auth_output(text: str) -> str:
     """Best-effort redaction for device-code auth flows (avoid leaking live codes into logs)."""
     # Redact user_code URL param if present.
@@ -96,7 +97,9 @@ class QCliProvider(BaseProvider):
         clean = _redact_auth_output(clean)
         snippet_lines = [ln for ln in clean.splitlines() if ln.strip()]
         snippet = "\n".join(snippet_lines[-40:]) if snippet_lines else "(no output captured)"
-        raise TimeoutError(f"Q CLI initialization timed out after 30 seconds\n--- last output ---\n{snippet}")
+        raise TimeoutError(
+            f"Q CLI initialization timed out after 30 seconds\n--- last output ---\n{snippet}"
+        )
 
         # Unreachable
 

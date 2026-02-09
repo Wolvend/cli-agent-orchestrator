@@ -115,9 +115,7 @@ class TestGetInboxMessagesEndpoint:
         with patch("cli_agent_orchestrator.api.main.get_inbox_messages") as mock_get:
             mock_get.return_value = sample_inbox_messages[:1]
 
-            response = await client.get(
-                "/terminals/abcdef12/inbox/messages?status=pending&limit=5"
-            )
+            response = await client.get("/terminals/abcdef12/inbox/messages?status=pending&limit=5")
 
             assert response.status_code == 200
             data = response.json()

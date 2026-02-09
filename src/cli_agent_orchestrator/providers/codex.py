@@ -142,7 +142,7 @@ class CodexProvider(BaseProvider):
         # NOTE: Do not use `set -e`; we want the marker emission to run even if codex fails.
         marker_tail = (
             f" ; rc=$? ; "
-            f"if [ \"$rc\" -eq 0 ]; then echo {shlex.quote(DONE_MARKER)} ; "
+            f'if [ "$rc" -eq 0 ]; then echo {shlex.quote(DONE_MARKER)} ; '
             f"else echo {shlex.quote(ERROR_MARKER)} ; fi ; "
             f"echo {shlex.quote(IDLE_MARKER)}"
         )

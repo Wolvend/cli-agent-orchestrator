@@ -47,7 +47,9 @@ class TestLlamaCppProviderInitialization:
     @patch("cli_agent_orchestrator.providers.llama_cpp.wait_until_status")
     @patch("cli_agent_orchestrator.providers.llama_cpp.wait_for_shell")
     @patch("cli_agent_orchestrator.providers.llama_cpp.tmux_client")
-    def test_initialize_timeout_raises(self, mock_tmux, mock_wait_shell, mock_wait_status, _mock_cmd):
+    def test_initialize_timeout_raises(
+        self, mock_tmux, mock_wait_shell, mock_wait_status, _mock_cmd
+    ):
         mock_wait_shell.return_value = True
         mock_wait_status.return_value = False
 

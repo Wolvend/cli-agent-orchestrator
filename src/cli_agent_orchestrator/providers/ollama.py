@@ -117,11 +117,11 @@ class OllamaProvider(BaseProvider):
 
             if status == TerminalStatus.ERROR:
                 # Pull a small tail and surface the last Error line.
-                raw = tmux_client.get_history(
-                    self.session_name, self.window_name, tail_lines=80
-                )
+                raw = tmux_client.get_history(self.session_name, self.window_name, tail_lines=80)
                 clean = re.sub(ANSI_CODE_PATTERN, "", raw)
-                err_lines = [ln.strip() for ln in clean.splitlines() if ln.strip().startswith("Error:")]
+                err_lines = [
+                    ln.strip() for ln in clean.splitlines() if ln.strip().startswith("Error:")
+                ]
                 err = err_lines[-1] if err_lines else "Error: (unknown)"
                 raise RuntimeError(
                     f"Ollama CLI error during startup: {err}\n"

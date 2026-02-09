@@ -1,8 +1,8 @@
 """Constants for CLI Agent Orchestrator application."""
 
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from cli_agent_orchestrator.models.provider import ProviderType
 
@@ -22,6 +22,7 @@ _DEFAULT_CAO_HOME_DIR = Path.home() / ".aws" / "cli-agent-orchestrator"
 # If unset, CAO uses the user's home directory as usual (or falls back to /tmp if not writable).
 _CAO_HOME_DIR_OVERRIDE = os.getenv("CAO_HOME_DIR")
 
+
 def _ensure_writable_dir(path: Path) -> bool:
     """Ensure a directory exists and is writable.
 
@@ -30,7 +31,9 @@ def _ensure_writable_dir(path: Path) -> bool:
     """
     try:
         path.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(prefix="._cao_write_test_", dir=str(path), delete=True) as tmp:
+        with tempfile.NamedTemporaryFile(
+            prefix="._cao_write_test_", dir=str(path), delete=True
+        ) as tmp:
             tmp.write(b"1")
             tmp.flush()
         return True

@@ -5,7 +5,7 @@ import os
 import re
 import shlex
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from cli_agent_orchestrator.clients.tmux import tmux_client
 from cli_agent_orchestrator.constants import CAO_HOME_DIR
@@ -170,7 +170,12 @@ class GeminiProvider(BaseProvider):
         # is the most reliable "final answer" signal.
         # IMPORTANT: Do not allow `\\s` here; it includes newlines and can accidentally capture the
         # next UI line when the model response is blank.
-        model_lines = re.findall(r"^Model:[ \t]*(.*)$", clean_output, re.MULTILINE)
+        # mypy/typeshed doesn't always infer a concrete `list[str]` here; cast keeps the
+        # return type stable for downstream processing.
+        model_lines = cast(
+            list[str],
+            re.findall(r"^Model:[ \t]*(.*)$", clean_output, re.MULTILINE),
+        )
         if not model_lines:
             raise ValueError("No Gemini response found - no 'Model:' line detected")
 

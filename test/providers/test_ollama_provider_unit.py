@@ -29,7 +29,9 @@ class TestOllamaProviderInitialization:
         )
 
         provider = OllamaProvider("test1234", "test-session", "window-0", None)
-        with patch.object(OllamaProvider, "get_status", return_value=TerminalStatus.IDLE) as mock_get_status:
+        with patch.object(
+            OllamaProvider, "get_status", return_value=TerminalStatus.IDLE
+        ) as mock_get_status:
             result = provider.initialize()
 
         assert result is True

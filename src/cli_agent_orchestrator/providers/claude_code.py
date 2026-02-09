@@ -137,7 +137,7 @@ class ClaudeCodeProvider(BaseProvider):
         # Add system prompt via command substitution to keep the typed command short.
         if self._system_prompt_path is not None:
             parts.append("--append-system-prompt")
-            parts.append(f"\"$(cat {shlex.quote(str(self._system_prompt_path))})\"")
+            parts.append(f'"$(cat {shlex.quote(str(self._system_prompt_path))})"')
 
         # MCP config supports JSON files directly; prefer a file path over inline JSON.
         if self._mcp_config_path is not None:
@@ -152,7 +152,7 @@ class ClaudeCodeProvider(BaseProvider):
         # We do this at the end because the system prompt token already includes quotes.
         rendered: list[str] = []
         for tok in parts:
-            if tok.startswith("\"$(") and tok.endswith(")\""):
+            if tok.startswith('"$(') and tok.endswith(')"'):
                 rendered.append(tok)
                 continue
             rendered.append(shlex.quote(tok))
@@ -195,7 +195,7 @@ class ClaudeCodeProvider(BaseProvider):
         marker_tail = (
             " ; rc=$? ; "
             f"rm -f {shlex.quote(str(prompt_path))} ; "
-            f"if [ \"$rc\" -eq 0 ]; then echo {shlex.quote(DONE_MARKER)} ; "
+            f'if [ "$rc" -eq 0 ]; then echo {shlex.quote(DONE_MARKER)} ; '
             f"else echo {shlex.quote(ERROR_MARKER)} ; fi ; "
             f"echo {shlex.quote(IDLE_MARKER)}"
         )
@@ -226,9 +226,7 @@ class ClaudeCodeProvider(BaseProvider):
             # attach to the tmux session and resolve (e.g. `/login`, `setup-token`, etc.).
             try:
                 if self._last_message_path.exists():
-                    err_text = self._last_message_path.read_text(
-                        encoding="utf-8", errors="replace"
-                    )
+                    err_text = self._last_message_path.read_text(encoding="utf-8", errors="replace")
                     err_text = re.sub(ANSI_CODE_PATTERN, "", err_text)
                     if re.search(WAITING_PROMPT_PATTERN, err_text, re.IGNORECASE | re.MULTILINE):
                         return TerminalStatus.WAITING_USER_ANSWER

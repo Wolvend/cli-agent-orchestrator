@@ -66,9 +66,7 @@ class TestKiroCliProviderInitialization:
 
     @patch("cli_agent_orchestrator.providers.kiro_cli.wait_for_shell")
     @patch("cli_agent_orchestrator.providers.kiro_cli.tmux_client")
-    def test_initialize_waiting_user_answer_is_ok(
-        self, mock_tmux, mock_wait_shell
-    ):
+    def test_initialize_waiting_user_answer_is_ok(self, mock_tmux, mock_wait_shell):
         """Treat WAITING_USER_ANSWER as successful init (interactive setup flows)."""
         mock_wait_shell.return_value = True
         mock_tmux.get_history.return_value = load_fixture("kiro_cli_login_output.txt")

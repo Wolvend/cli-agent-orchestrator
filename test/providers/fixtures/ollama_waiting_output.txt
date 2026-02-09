@@ -1,0 +1,4 @@
+>>> do something
+Use tool: websearch? [y/n]
+>>>
+

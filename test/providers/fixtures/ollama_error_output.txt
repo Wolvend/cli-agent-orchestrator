@@ -1,0 +1,4 @@
+>>> hello
+Error: could not connect to ollama server
+>>>
+

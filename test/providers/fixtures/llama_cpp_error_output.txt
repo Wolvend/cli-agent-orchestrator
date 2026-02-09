@@ -1,0 +1,6 @@
+llama-cli --simple-io
+>
+> Hello
+Failed to load the model: missing file
+>
+

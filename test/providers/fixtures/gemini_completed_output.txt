@@ -1,0 +1,4 @@
+User: What is 2+2?
+Model: 2+2 is 4.
+
+Type your message or @path/to/file

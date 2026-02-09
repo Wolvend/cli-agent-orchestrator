@@ -6,7 +6,10 @@ import pytest
 
 from cli_agent_orchestrator.models.provider import ProviderType
 from cli_agent_orchestrator.providers.codex import CodexProvider
+from cli_agent_orchestrator.providers.gemini import GeminiProvider
+from cli_agent_orchestrator.providers.llama_cpp import LlamaCppProvider
 from cli_agent_orchestrator.providers.manager import ProviderManager
+from cli_agent_orchestrator.providers.ollama import OllamaProvider
 
 
 def test_create_provider_codex_stores_mapping():
@@ -20,6 +23,48 @@ def test_create_provider_codex_stores_mapping():
     )
 
     assert isinstance(provider, CodexProvider)
+    assert manager.get_provider("t1") is provider
+
+
+def test_create_provider_gemini_stores_mapping():
+    manager = ProviderManager()
+    provider = manager.create_provider(
+        ProviderType.GEMINI.value,
+        terminal_id="t1",
+        tmux_session="s1",
+        tmux_window="w1",
+        agent_profile=None,
+    )
+
+    assert isinstance(provider, GeminiProvider)
+    assert manager.get_provider("t1") is provider
+
+
+def test_create_provider_ollama_stores_mapping():
+    manager = ProviderManager()
+    provider = manager.create_provider(
+        ProviderType.OLLAMA.value,
+        terminal_id="t1",
+        tmux_session="s1",
+        tmux_window="w1",
+        agent_profile=None,
+    )
+
+    assert isinstance(provider, OllamaProvider)
+    assert manager.get_provider("t1") is provider
+
+
+def test_create_provider_llama_cpp_stores_mapping():
+    manager = ProviderManager()
+    provider = manager.create_provider(
+        ProviderType.LLAMA_CPP.value,
+        terminal_id="t1",
+        tmux_session="s1",
+        tmux_window="w1",
+        agent_profile=None,
+    )
+
+    assert isinstance(provider, LlamaCppProvider)
     assert manager.get_provider("t1") is provider
 
 

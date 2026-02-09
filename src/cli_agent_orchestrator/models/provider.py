@@ -8,3 +8,6 @@ class ProviderType(str, Enum):
     KIRO_CLI = "kiro_cli"
     CLAUDE_CODE = "claude_code"
     CODEX = "codex"
+    GEMINI = "gemini"
+    OLLAMA = "ollama"
+    LLAMA_CPP = "llama_cpp"

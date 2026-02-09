@@ -1,0 +1,5 @@
+>>> write a haiku
+An autumn evening,
+Leaves drift on a silent breeze,
+Moonlight on still ponds.
+

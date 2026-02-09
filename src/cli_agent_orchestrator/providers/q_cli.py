@@ -2,12 +2,13 @@
 
 import logging
 import re
+import time
 from typing import List, Optional
 
 from cli_agent_orchestrator.clients.tmux import tmux_client
 from cli_agent_orchestrator.models.terminal import TerminalStatus
 from cli_agent_orchestrator.providers.base import BaseProvider
-from cli_agent_orchestrator.utils.terminal import wait_for_shell, wait_until_status
+from cli_agent_orchestrator.utils.terminal import wait_for_shell
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,34 @@ GENERIC_PROMPT_PATTERN = r"\x1b\[38;5;13m>\s*\x1b\[39m\s*$"
 IDLE_PROMPT_PATTERN_LOG = r"\x1b\[38;5;13m>\s*\x1b\[39m"
 
 # Error indicators
-ERROR_INDICATORS = ["Amazon Q is having trouble responding right now"]
+ERROR_INDICATORS = [
+    "Amazon Q is having trouble responding right now",
+    "dispatch failure",
+]
+
+# Device-code login prompt shown when the CLI needs the user to authenticate in a browser.
+# NOTE: During auth the CLI can spam progress lines (e.g. "Logging in...") which may push the
+# initial URL/code out of the last N captured tmux lines. Include a stable progress marker so
+# we still surface WAITING_USER_ANSWER.
+LOGIN_PROMPT_PATTERN = (
+    r"(?:Confirm the following code in the browser|Open this URL:|user_code=|"
+    r"view\.awsapps\.com/start/#/device|Logging in\.{3,}|"
+    r"let's get you signed in|Press enter to continue to the browser|"
+    r"press enter to continue|press enter|esc to cancel)"
+)
+
+def _redact_auth_output(text: str) -> str:
+    """Best-effort redaction for device-code auth flows (avoid leaking live codes into logs)."""
+    # Redact user_code URL param if present.
+    text = re.sub(r"(user_code=)[A-Za-z0-9-]+", r"\1REDACTED", text)
+    # Redact any full URL line that looks like the AWS SSO device flow.
+    text = re.sub(
+        r"(Open this URL:\s*)https?://\\S+",
+        r"\1REDACTED_URL",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
 
 
 class QCliProvider(BaseProvider):
@@ -51,11 +79,26 @@ class QCliProvider(BaseProvider):
         command = f"q chat --agent {self._agent_profile}"
         tmux_client.send_keys(self.session_name, self.window_name, command)
 
-        if not wait_until_status(self, TerminalStatus.IDLE, timeout=30.0):
-            raise TimeoutError("Q CLI initialization timed out after 30 seconds")
+        # Q CLI may enter interactive setup flows (auth, permission prompts, etc.).
+        # Treat WAITING_USER_ANSWER as a successful init so the user can attach and proceed.
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            status = self.get_status(tail_lines=200)
+            if status in (TerminalStatus.IDLE, TerminalStatus.WAITING_USER_ANSWER):
+                self._initialized = True
+                return True
+            if status == TerminalStatus.ERROR:
+                raise RuntimeError("Q CLI entered ERROR state during initialization")
+            time.sleep(1.0)
 
-        self._initialized = True
-        return True
+        raw = tmux_client.get_history(self.session_name, self.window_name, tail_lines=200)
+        clean = re.sub(ANSI_CODE_PATTERN, "", raw or "")
+        clean = _redact_auth_output(clean)
+        snippet_lines = [ln for ln in clean.splitlines() if ln.strip()]
+        snippet = "\n".join(snippet_lines[-40:]) if snippet_lines else "(no output captured)"
+        raise TimeoutError(f"Q CLI initialization timed out after 30 seconds\n--- last output ---\n{snippet}")
+
+        # Unreachable
 
     def get_status(self, tail_lines: Optional[int] = None) -> TerminalStatus:
         """Get Q CLI status by analyzing terminal output."""
@@ -68,12 +111,6 @@ class QCliProvider(BaseProvider):
         # Strip ANSI codes once for all pattern matching
         clean_output = re.sub(ANSI_CODE_PATTERN, "", output)
 
-        # Check if we have the idle prompt (not processing)
-        has_idle_prompt = re.search(self._idle_prompt_pattern, clean_output)
-
-        if not has_idle_prompt:
-            return TerminalStatus.PROCESSING
-
         # Check for error indicators
         if any(indicator.lower() in clean_output.lower() for indicator in ERROR_INDICATORS):
             return TerminalStatus.ERROR
@@ -82,13 +119,21 @@ class QCliProvider(BaseProvider):
         if re.search(self._permission_prompt_pattern, clean_output, re.MULTILINE | re.DOTALL):
             return TerminalStatus.WAITING_USER_ANSWER
 
-        # Check for completed state (has response + agent prompt)
-        if re.search(GREEN_ARROW_PATTERN, clean_output, re.MULTILINE):
-            logger.debug(f"get_status: returning COMPLETED")
-            return TerminalStatus.COMPLETED
+        # Check if we have the idle prompt (not processing)
+        has_idle_prompt = re.search(self._idle_prompt_pattern, clean_output)
+        if has_idle_prompt:
+            # Check for completed state (has response + agent prompt)
+            if re.search(GREEN_ARROW_PATTERN, clean_output, re.MULTILINE):
+                logger.debug(f"get_status: returning COMPLETED")
+                return TerminalStatus.COMPLETED
+            # Just agent prompt, no response
+            return TerminalStatus.IDLE
 
-        # Just agent prompt, no response
-        return TerminalStatus.IDLE
+        # Device-code login flow requires user to authenticate in a browser.
+        if re.search(LOGIN_PROMPT_PATTERN, clean_output, re.IGNORECASE):
+            return TerminalStatus.WAITING_USER_ANSWER
+
+        return TerminalStatus.PROCESSING
 
     def extract_last_message_from_script(self, script_output: str) -> str:
         """Extract agent's final response message using green arrow indicator."""

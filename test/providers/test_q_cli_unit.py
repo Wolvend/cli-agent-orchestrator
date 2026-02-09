@@ -23,12 +23,11 @@ class TestQCliProviderInitialization:
     """Test Q CLI provider initialization."""
 
     @patch("cli_agent_orchestrator.providers.q_cli.wait_for_shell")
-    @patch("cli_agent_orchestrator.providers.q_cli.wait_until_status")
     @patch("cli_agent_orchestrator.providers.q_cli.tmux_client")
-    def test_initialize_success(self, mock_tmux, mock_wait_status, mock_wait_shell):
+    def test_initialize_success(self, mock_tmux, mock_wait_shell):
         """Test successful initialization."""
         mock_wait_shell.return_value = True
-        mock_wait_status.return_value = True
+        mock_tmux.get_history.return_value = load_fixture("q_cli_idle_output.txt")
 
         provider = QCliProvider("test1234", "test-session", "window-0", "developer")
         result = provider.initialize()
@@ -38,7 +37,6 @@ class TestQCliProviderInitialization:
         mock_tmux.send_keys.assert_called_once_with(
             "test-session", "window-0", "q chat --agent developer"
         )
-        mock_wait_status.assert_called_once()
 
     @patch("cli_agent_orchestrator.providers.q_cli.wait_for_shell")
     @patch("cli_agent_orchestrator.providers.q_cli.tmux_client")
@@ -52,17 +50,31 @@ class TestQCliProviderInitialization:
             provider.initialize()
 
     @patch("cli_agent_orchestrator.providers.q_cli.wait_for_shell")
-    @patch("cli_agent_orchestrator.providers.q_cli.wait_until_status")
     @patch("cli_agent_orchestrator.providers.q_cli.tmux_client")
-    def test_initialize_q_cli_timeout(self, mock_tmux, mock_wait_status, mock_wait_shell):
+    @patch("cli_agent_orchestrator.providers.q_cli.time.time")
+    def test_initialize_q_cli_timeout(self, mock_time, mock_tmux, mock_wait_shell):
         """Test initialization with Q CLI timeout."""
         mock_wait_shell.return_value = True
-        mock_wait_status.return_value = False
+        mock_tmux.get_history.return_value = load_fixture("q_cli_processing_output.txt")
+        # Force the init loop to time out immediately (no sleeps in tests).
+        mock_time.side_effect = [0.0, 31.0]
 
         provider = QCliProvider("test1234", "test-session", "window-0", "developer")
 
         with pytest.raises(TimeoutError, match="Q CLI initialization timed out"):
             provider.initialize()
+
+    @patch("cli_agent_orchestrator.providers.q_cli.wait_for_shell")
+    @patch("cli_agent_orchestrator.providers.q_cli.tmux_client")
+    def test_initialize_waiting_user_answer_is_ok(
+        self, mock_tmux, mock_wait_shell
+    ):
+        """Treat WAITING_USER_ANSWER as successful init (interactive setup flows)."""
+        mock_wait_shell.return_value = True
+        mock_tmux.get_history.return_value = load_fixture("q_cli_login_output.txt")
+
+        provider = QCliProvider("test1234", "test-session", "window-0", "developer")
+        assert provider.initialize() is True
 
     def test_initialization_with_different_agent_profiles(self):
         """Test initialization with various agent profile names."""
@@ -112,6 +124,16 @@ class TestQCliProviderStatusDetection:
     def test_get_status_waiting_user_answer(self, mock_tmux):
         """Test WAITING_USER_ANSWER status detection."""
         mock_tmux.get_history.return_value = load_fixture("q_cli_permission_output.txt")
+
+        provider = QCliProvider("test1234", "test-session", "window-0", "developer")
+        status = provider.get_status()
+
+        assert status == TerminalStatus.WAITING_USER_ANSWER
+
+    @patch("cli_agent_orchestrator.providers.q_cli.tmux_client")
+    def test_get_status_waiting_user_answer_login_prompt(self, mock_tmux):
+        """Test WAITING_USER_ANSWER status detection for device-code login prompt."""
+        mock_tmux.get_history.return_value = load_fixture("q_cli_login_output.txt")
 
         provider = QCliProvider("test1234", "test-session", "window-0", "developer")
         status = provider.get_status()

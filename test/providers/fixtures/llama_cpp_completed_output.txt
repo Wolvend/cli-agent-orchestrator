@@ -1,0 +1,6 @@
+llama-cli --simple-io
+>
+> What is 2+2?
+2+2 is 4.
+>
+

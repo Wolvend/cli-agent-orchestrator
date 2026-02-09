@@ -1,0 +1,4 @@
+User: Explain something
+Error: Something went wrong
+
+Type your message or @path/to/file

@@ -56,8 +56,10 @@ class TmuxClient:
         try:
             working_directory = self._resolve_and_validate_working_directory(working_directory)
 
-            environment = os.environ.copy()
-            environment["CAO_TERMINAL_ID"] = terminal_id
+            # Only pass the minimal env needed for CAO to identify the pane.
+            # Passing the full process environment leaks secrets into the `tmux new-session`
+            # command line (visible via process listings).
+            environment = {"CAO_TERMINAL_ID": terminal_id}
 
             session = self.server.new_session(
                 session_name=session_name,
@@ -177,10 +179,15 @@ class TmuxClient:
             if not window:
                 raise ValueError(f"Window '{window_name}' not found in session '{session_name}'")
 
-            # Use cmd to run capture-pane with -e (escape sequences) and -p (print) flags
+            # Use cmd to run capture-pane with -p (print).
+            #
+            # We intentionally do NOT include `-e` (escape sequences). Many interactive CLIs emit
+            # a lot of control/escape sequences (cursor moves, bracketed paste toggles, etc.)
+            # which makes prompt detection brittle. Providers already operate on plain text, so
+            # stripping escapes at the tmux boundary is both cheaper and more reliable.
             pane = window.panes[0]
             lines = tail_lines if tail_lines is not None else TMUX_HISTORY_LINES
-            result = pane.cmd("capture-pane", "-e", "-p", "-S", f"-{lines}")
+            result = pane.cmd("capture-pane", "-p", "-S", f"-{lines}")
             # Join all lines with newlines to get complete output
             return "\n".join(result.stdout) if result.stdout else ""
         except Exception as e:

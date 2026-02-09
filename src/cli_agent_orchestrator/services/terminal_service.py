@@ -170,7 +170,9 @@ def send_input(terminal_id: str, message: str) -> bool:
         if not metadata:
             raise ValueError(f"Terminal '{terminal_id}' not found")
 
-        tmux_client.send_keys(metadata["tmux_session"], metadata["tmux_window"], message)
+        provider = provider_manager.get_provider(terminal_id)
+        formatted_message = provider.format_input(message) if provider is not None else message
+        tmux_client.send_keys(metadata["tmux_session"], metadata["tmux_window"], formatted_message)
 
         update_last_active(terminal_id)
         logger.info(f"Sent input to terminal: {terminal_id}")

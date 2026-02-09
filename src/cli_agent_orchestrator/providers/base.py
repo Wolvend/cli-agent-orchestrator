@@ -80,6 +80,14 @@ class BaseProvider(ABC):
         """Clean up provider resources."""
         pass
 
+    def format_input(self, message: str) -> str:
+        """Format a user message before sending it to the terminal.
+
+        Most providers are interactive and accept the raw message. Some providers may need to wrap
+        the message in a command (for example, running a one-shot CLI invocation).
+        """
+        return message
+
     def _update_status(self, status: TerminalStatus) -> None:
         """Update internal status."""
         self._status = status

@@ -1,6 +1,2 @@
-You Fix the failing tests
-assistant: Here's the fix with updated tests.
-
-All tests now pass.
-
-❯ 
+CAO_CODEX_DONE
+CAO_CODEX_IDLE

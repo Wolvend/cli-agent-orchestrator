@@ -1,0 +1,8 @@
+llama-cli --simple-io
+>
+> Write a haiku about testing.
+Haiku about tests:
+Assertions gently bloom
+In quiet code gardens
+Still running...
+

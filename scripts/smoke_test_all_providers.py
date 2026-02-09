@@ -37,9 +37,7 @@ class ProviderResult:
 CAO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 CAO_BIN = CAO_ROOT / ".venv" / "bin" / "cao-server"
 
-LLAMA_BIN_DEFAULT = (
-    "/home/wolvend/codex/agent_playground/llama.cpp/build/bin/llama-cli"
-)
+LLAMA_BIN_DEFAULT = "/home/wolvend/codex/agent_playground/llama.cpp/build/bin/llama-cli"
 LLAMA_GGUF_DEFAULT = (
     "/tmp/cao-e2e-llama-cpp/providers/llama-cpp-home/.cache/llama.cpp/"
     "ggml-org_gemma-3-1b-it-GGUF_gemma-3-1b-it-Q4_K_M.gguf"
@@ -184,9 +182,9 @@ def _test_provider(
                 time.sleep(1.0)
 
             if status != "completed":
+                out = ""
                 # If the provider needs interactive setup/auth, treat as PARTIAL (best-effort).
                 if status == "waiting_user_answer":
-                    out = ""
                     try:
                         r = client.get(
                             f"{BASE_URL}/terminals/{term_id}/output",
@@ -200,9 +198,7 @@ def _test_provider(
 
                     # Best effort cleanup
                     try:
-                        client.delete(
-                            f"{BASE_URL}/sessions/{session_name}", timeout=30.0
-                        )
+                        client.delete(f"{BASE_URL}/sessions/{session_name}", timeout=30.0)
                     except Exception:
                         pass
 
@@ -337,9 +333,7 @@ def main() -> int:
     ]
 
     agent_profile = os.getenv("SMOKE_AGENT_PROFILE", "developer")
-    working_directory = os.getenv(
-        "SMOKE_WORKDIR", "/home/wolvend/codex/agent_playground"
-    )
+    working_directory = os.getenv("SMOKE_WORKDIR", "/home/wolvend/codex/agent_playground")
 
     # Per-provider time budgets (seconds).
     create_timeouts = {
@@ -385,9 +379,7 @@ def main() -> int:
         if provider == "llama_cpp":
             env["CAO_LLAMA_CPP_BIN"] = llama_bin
             env["CAO_LLAMA_CPP_MODEL"] = llama_model
-            env["CAO_LLAMA_CPP_INIT_TIMEOUT"] = os.getenv(
-                "CAO_LLAMA_CPP_INIT_TIMEOUT", "300"
-            )
+            env["CAO_LLAMA_CPP_INIT_TIMEOUT"] = os.getenv("CAO_LLAMA_CPP_INIT_TIMEOUT", "300")
 
             if not pathlib.Path(llama_bin).exists():
                 results.append(
@@ -457,8 +449,10 @@ def main() -> int:
     partial = [r for r in results if r.status in ("PARTIAL",)]
 
     print("")
-    print(f"PASS={len([r for r in results if r.status == 'PASS'])} "
-          f"PARTIAL={len(partial)} FAIL={len(failed)} BLOCKED={len(blocked)}")
+    print(
+        f"PASS={len([r for r in results if r.status == 'PASS'])} "
+        f"PARTIAL={len(partial)} FAIL={len(failed)} BLOCKED={len(blocked)}"
+    )
 
     # Exit non-zero if anything failed.
     return 1 if failed else 0

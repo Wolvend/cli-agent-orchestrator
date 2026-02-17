@@ -119,7 +119,8 @@ class TmuxClient:
         target = f"{session_name}:{window_name}"
         buf_name = f"cao_{uuid.uuid4().hex[:8]}"
         try:
-            logger.info(f"send_keys: {target} - keys: {keys}")
+            # Do not log the actual prompt content (may contain secrets).
+            logger.info(f"send_keys: {target} ({len(keys)} chars)")
             subprocess.run(
                 ["tmux", "load-buffer", "-b", buf_name, "-"],
                 input=keys.encode(),

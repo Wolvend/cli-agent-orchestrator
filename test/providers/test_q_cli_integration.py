@@ -54,6 +54,23 @@ def q_cli_available():
     """Check if Q CLI is available and configured."""
     if not shutil.which("q"):
         pytest.skip("Q CLI not installed")
+    # Recent Amazon Q installs ship a shim that warns:
+    # "Warning! Q CLI is now Kiro CLI and should be invoked as kiro-cli rather than q"
+    # In that case, these Q-specific integration tests become flaky/invalid because
+    # agent profile discovery and prompts are owned by Kiro CLI instead.
+    try:
+        res = subprocess.run(
+            ["q", "chat", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        combined = f"{res.stdout or ''}\n{res.stderr or ''}"
+        if "Q CLI is now Kiro CLI" in combined or "kiro-cli rather than q" in combined:
+            pytest.skip("q is a Kiro CLI shim; use kiro_cli provider integration tests instead")
+    except Exception:
+        # Best-effort probe only; do not fail the suite on probe issues.
+        pass
     return True
 
 

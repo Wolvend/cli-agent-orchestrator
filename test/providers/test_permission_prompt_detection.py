@@ -100,9 +100,11 @@ class TestPermissionPromptActive:
             "Allow this action? Use 't' to trust (always allow) this tool "
             "for the session. [y/n/t]:\n"
         )
-        # No idle prompt → PROCESSING (no idle prompt detected at all)
+        # If the tail capture ends right after the permission prompt, we must
+        # assume the prompt is still active to avoid delivering inbox messages
+        # mid-confirmation.
         provider = make_provider("developer")
-        assert provider.get_status() == TerminalStatus.PROCESSING
+        assert provider.get_status() == TerminalStatus.WAITING_USER_ANSWER
 
 
 class TestPermissionPromptStale:

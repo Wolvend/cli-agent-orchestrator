@@ -34,6 +34,38 @@ WINDOW_NAME = "window-0"
 TERMINAL_ID = "test1234"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def tmux_available(tmp_path_factory):
+    """Skip this module if tmux can't be used in the current environment.
+
+    These are integration tests that rely on tmux sessions. In some sandboxed
+    environments tmux socket operations are blocked, which would otherwise fail
+    the whole suite.
+    """
+    if not shutil.which("tmux"):
+        pytest.skip("tmux not installed")
+
+    import uuid
+
+    probe_session = f"test-tmux-probe-{uuid.uuid4().hex[:8]}"
+    probe_dir = tmp_path_factory.mktemp("tmux_probe")
+    created = False
+
+    try:
+        tmux_client.create_session(
+            probe_session,
+            "probe-window",
+            "probe-term-id",
+            working_directory=str(probe_dir),
+        )
+        created = True
+    except Exception as e:
+        pytest.skip(f"tmux unavailable in this environment: {e}")
+    finally:
+        if created:
+            tmux_client.kill_session(probe_session)
+
+
 @pytest.fixture(scope="session")
 def kiro_cli_available():
     if not shutil.which("kiro-cli"):

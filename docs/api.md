@@ -2,6 +2,10 @@
 
 Base URL: `http://localhost:9889` (default)
 
+Optional env overrides:
+- Server listen: `CAO_SERVER_HOST`, `CAO_SERVER_PORT`
+- Client target: `CAO_API_BASE_URL` (useful when the server is not at the default host/port)
+
 ## Health Check
 
 ### GET /health
@@ -193,4 +197,3 @@ Error response format:
 ```
 
 ---
-

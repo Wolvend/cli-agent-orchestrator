@@ -258,6 +258,12 @@ You can combine the three orchestration modes above into custom workflows, or cr
 
 For complete API documentation, see [docs/api.md](docs/api.md).
 
+### agent_playground Stack Integration (TaskFork + Model-Jump + Spinnybot)
+
+If you are using CAO inside the `agent_playground` workspace (where TaskFork/Model-Jump/Spinnybot are designed to interlink), see:
+
+- [docs/stack-integration-agent_playground.md](docs/stack-integration-agent_playground.md)
+
 ## Flows - Scheduled Agent Sessions
 
 Flows allow you to schedule agent sessions to run automatically based on cron expressions.

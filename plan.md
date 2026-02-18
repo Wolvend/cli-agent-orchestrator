@@ -60,6 +60,9 @@ Add a lightweight “stack mode” doc + examples that show CAO running as the t
 2. Model-Jump routing to API backends while CAO handles CLI backends
 3. Oroboros providing MCP memory/tools for long-running projects
 
+Status:
+- Added `docs/stack-integration-agent_playground.md` and linked from `README.md`.
+
 ### Phase 3: Contract Tests (Next)
 
 Add a small set of HTTP contract tests that:
@@ -72,6 +75,10 @@ Add a small set of HTTP contract tests that:
 - delete the session
 
 These tests should be runnable without real provider CLIs by using a “dummy provider” that echoes input.
+
+Status:
+- Added route-level HTTP contract tests (service-mocked) to lock down TaskFork-critical endpoints and param names.
+  - See `test/api/test_taskfork_contract.py`.
 
 ## Validation Commands (Local)
 
@@ -86,4 +93,3 @@ Optional provider smoke (best-effort; depends on local CLI installs):
 cd source/agents/frameworks/cli-agent-orchestrator
 CAO_OLLAMA_MODEL=qwen2.5:0.5b .venv/bin/python scripts/smoke_test_all_providers.py
 ```
-

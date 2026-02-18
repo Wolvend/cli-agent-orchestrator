@@ -80,8 +80,22 @@ DATABASE_FILE = DB_DIR / "cli-agent-orchestrator.db"
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
 
 # Server configuration
-SERVER_HOST = "localhost"
-SERVER_PORT = 9889
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return n if 1 <= n <= 65535 else default
+
+
+SERVER_HOST = os.getenv("CAO_SERVER_HOST", "localhost")
+SERVER_PORT = _env_int("CAO_SERVER_PORT", 9889)
 SERVER_VERSION = "0.1.0"
-API_BASE_URL = f"http://{SERVER_HOST}:{SERVER_PORT}"
+
+_api_base_url_env = os.getenv("CAO_API_BASE_URL", "").strip()
+API_BASE_URL = _api_base_url_env.rstrip("/") if _api_base_url_env else f"http://{SERVER_HOST}:{SERVER_PORT}"
 CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]

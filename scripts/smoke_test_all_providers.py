@@ -13,6 +13,7 @@ Run from the repo root:
 
 from __future__ import annotations
 
+import argparse
 import os
 import pathlib
 import shutil
@@ -44,6 +45,86 @@ LLAMA_GGUF_DEFAULT = (
 )
 
 BASE_URL = "http://localhost:9889"
+DEFAULT_PROVIDERS = [
+    "llama_cpp",
+    "gemini",
+    "codex",
+    "claude_code",
+    "ollama",
+    "q_cli",
+    "kiro_cli",
+]
+DEFAULT_CREATE_TIMEOUTS = {
+    "llama_cpp": 120.0,
+    "gemini": 120.0,
+    "codex": 180.0,
+    "claude_code": 180.0,
+    "ollama": 180.0,
+    "q_cli": 30.0,
+    "kiro_cli": 30.0,
+}
+DEFAULT_COMPLETION_TIMEOUTS = {
+    "llama_cpp": 180.0,
+    "gemini": 180.0,
+    "codex": 240.0,
+    "claude_code": 240.0,
+    "ollama": 180.0,
+    "q_cli": 120.0,
+    "kiro_cli": 120.0,
+}
+
+
+def _parse_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Smoke test CAO providers.",
+    )
+    parser.add_argument(
+        "--providers",
+        default=os.getenv("SMOKE_PROVIDERS", ""),
+        help="Comma-separated provider names to run. Defaults to all known providers.",
+    )
+    parser.add_argument(
+        "--skip-providers",
+        default=os.getenv("SMOKE_SKIP_PROVIDERS", ""),
+        help="Comma-separated provider names to skip.",
+    )
+    parser.add_argument(
+        "--create-timeout",
+        type=float,
+        default=None,
+        help="Override create timeout for all providers.",
+    )
+    parser.add_argument(
+        "--completion-timeout",
+        type=float,
+        default=None,
+        help="Override completion timeout for all providers.",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=1.0,
+        help="Seconds to wait between completion status polls.",
+    )
+    parser.add_argument(
+        "--overall-timeout",
+        type=float,
+        default=None,
+        help=(
+            "Overall wall-clock timeout for all providers. Remaining providers "
+            "are marked BLOCKED."
+        ),
+    )
+    parser.add_argument(
+        "--prompt",
+        default="What is 2+2? Answer with just the number.",
+        help="Prompt used for each provider.",
+    )
+    return parser.parse_args()
 
 
 def _copy_tree(src: pathlib.Path, dst: pathlib.Path) -> None:
@@ -114,6 +195,8 @@ def _test_provider(
     env: dict[str, str],
     create_timeout_s: float,
     completion_timeout_s: float,
+    prompt: str,
+    poll_interval_s: float,
 ) -> ProviderResult:
     run_id = int(time.time())
     session_base = f"smoke-{provider}-{run_id}"
@@ -162,7 +245,6 @@ def _test_provider(
                 )
 
             # Send a basic prompt and wait for completion.
-            prompt = "What is 2+2? Answer with just the number."
             r = client.post(
                 f"{BASE_URL}/terminals/{term_id}/input",
                 params={"message": prompt},
@@ -179,7 +261,7 @@ def _test_provider(
                     break
                 if status in ("waiting_user_answer", "error"):
                     break
-                time.sleep(1.0)
+                time.sleep(max(0.25, poll_interval_s))
 
             if status != "completed":
                 out = ""
@@ -317,45 +399,70 @@ def _test_provider(
         _kill_tmux_session_best_effort(expected_session)
 
 
+def _collect_providers(args: argparse.Namespace) -> list[str]:
+    requested = _parse_csv(args.providers) if args.providers else []
+    skip = set(_parse_csv(args.skip_providers)) if args.skip_providers else set()
+    providers = requested or DEFAULT_PROVIDERS
+    normalized: list[str] = []
+    for provider in providers:
+        if provider and provider not in normalized:
+            normalized.append(provider)
+
+    providers = [p for p in normalized if p not in skip]
+    unknown = [p for p in providers if p not in DEFAULT_PROVIDERS]
+    if unknown:
+        print(f"ERROR: unknown provider(s): {', '.join(sorted(unknown))}", file=sys.stderr)
+        print("Known providers: " + ", ".join(DEFAULT_PROVIDERS), file=sys.stderr)
+        raise SystemExit(2)
+    return providers
+
+
+def _effective_timeout(
+    provider: str,
+    defaults: dict[str, float],
+    override: Optional[float],
+) -> float:
+    return override if override is not None else defaults[provider]
+
+
+def _block_remaining_providers(
+    results: list[ProviderResult],
+    providers: list[str],
+    start_index: int,
+    reason: str,
+) -> None:
+    for provider in providers[start_index:]:
+        results.append(
+            ProviderResult(
+                provider=provider,
+                status="BLOCKED",
+                detail=reason,
+            )
+        )
+
+
 def main() -> int:
     if not CAO_BIN.exists():
         print(f"ERROR: cao-server not found at {CAO_BIN}", file=sys.stderr)
         return 2
 
-    providers = [
-        "llama_cpp",
-        "gemini",
-        "codex",
-        "claude_code",
-        "ollama",
-        "q_cli",
-        "kiro_cli",
-    ]
+    try:
+        args = _parse_args()
+    except SystemExit as e:
+        # Preserve argparse semantics: `--help` should exit 0, usage errors 2.
+        return int(e.code) if isinstance(e.code, int) else 1
+
+    try:
+        providers = _collect_providers(args)
+    except SystemExit as e:
+        return int(e.code) if isinstance(e.code, int) else 1
 
     agent_profile = os.getenv("SMOKE_AGENT_PROFILE", "developer")
     working_directory = os.getenv("SMOKE_WORKDIR", "/home/wolvend/codex/agent_playground")
 
-    # Per-provider time budgets (seconds).
-    create_timeouts = {
-        "llama_cpp": 120.0,
-        "gemini": 120.0,
-        "codex": 180.0,
-        "claude_code": 180.0,
-        "ollama": 180.0,
-        "q_cli": 30.0,
-        "kiro_cli": 30.0,
-    }
-    completion_timeouts = {
-        "llama_cpp": 180.0,
-        "gemini": 180.0,
-        "codex": 240.0,
-        "claude_code": 240.0,
-        "ollama": 180.0,
-        "q_cli": 120.0,
-        "kiro_cli": 120.0,
-    }
-
     results: list[ProviderResult] = []
+    run_deadline = time.time() + args.overall_timeout if args.overall_timeout else None
+    poll_interval = max(0.25, args.poll_interval)
 
     # Inputs for llama.cpp smoke test (use local GGUF if present to avoid network).
     llama_bin = os.getenv("CAO_LLAMA_CPP_BIN", LLAMA_BIN_DEFAULT)
@@ -364,7 +471,32 @@ def main() -> int:
     # Seed source gemini auth/config into CAO's isolated HOME for gemini.
     user_gemini = pathlib.Path.home() / ".gemini"
 
-    for provider in providers:
+    for idx, provider in enumerate(providers, start=1):
+        if run_deadline is not None and time.time() >= run_deadline:
+            _block_remaining_providers(
+                results=results,
+                providers=providers,
+                start_index=idx - 1,
+                reason="overall timeout reached",
+            )
+            break
+
+        create_timeout = _effective_timeout(
+            provider=provider,
+            defaults=DEFAULT_CREATE_TIMEOUTS,
+            override=args.create_timeout,
+        )
+        completion_timeout = _effective_timeout(
+            provider=provider,
+            defaults=DEFAULT_COMPLETION_TIMEOUTS,
+            override=args.completion_timeout,
+        )
+        print(
+            f"[{idx}/{len(providers)}] provider={provider} "
+            f"create_timeout={create_timeout:.0f}s completion_timeout={completion_timeout:.0f}s",
+            flush=True,
+        )
+
         run_id = int(time.time())
         cao_home_dir = f"/tmp/cao-smoke-{provider}-{run_id}"
         env = os.environ.copy()
@@ -404,6 +536,11 @@ def main() -> int:
             # Copy ~/.gemini to $HOME/.gemini within the provider HOME directory.
             gemini_home = pathlib.Path(cao_home_dir) / "providers" / "gemini-home"
             _copy_tree(user_gemini, gemini_home / ".gemini")
+            # Align provider init timeout with this smoke run's create timeout.
+            env["CAO_GEMINI_INIT_TIMEOUT"] = os.getenv(
+                "CAO_GEMINI_INIT_TIMEOUT",
+                f"{max(60.0, create_timeout):g}",
+            )
 
         if provider == "ollama":
             # Optional override for remote ollama.
@@ -411,6 +548,15 @@ def main() -> int:
             if smoke_host:
                 env["OLLAMA_HOST"] = smoke_host
             env["CAO_OLLAMA_INIT_TIMEOUT"] = os.getenv("CAO_OLLAMA_INIT_TIMEOUT", "180")
+
+        if provider == "claude_code":
+            # Keep provider-internal run timeout below the smoke completion timeout so marker
+            # lines are emitted before the polling deadline.
+            inferred_run_timeout = max(30.0, completion_timeout - 20.0)
+            env["CAO_CLAUDE_CODE_RUN_TIMEOUT"] = os.getenv(
+                "CAO_CLAUDE_CODE_RUN_TIMEOUT",
+                f"{inferred_run_timeout:g}",
+            )
 
         # Fast-fail: q/kiro CLIs missing.
         if provider in ("q_cli", "kiro_cli"):
@@ -431,10 +577,13 @@ def main() -> int:
                 agent_profile=agent_profile,
                 working_directory=working_directory,
                 env=env,
-                create_timeout_s=create_timeouts[provider],
-                completion_timeout_s=completion_timeouts[provider],
+                create_timeout_s=create_timeout,
+                completion_timeout_s=completion_timeout,
+                prompt=args.prompt,
+                poll_interval_s=poll_interval,
             )
         )
+        print(f"    result={results[-1].status}: {results[-1].detail}", flush=True)
 
     # Print a concise report.
     print("SMOKE TEST RESULTS")

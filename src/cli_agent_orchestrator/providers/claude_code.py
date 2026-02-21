@@ -31,12 +31,14 @@ ANSI_CODE_PATTERN = r"\x1b\[[0-9;]*m"
 IDLE_MARKER = "CAO_CLAUDE_CODE_IDLE"
 DONE_MARKER = "CAO_CLAUDE_CODE_DONE"
 ERROR_MARKER = "CAO_CLAUDE_CODE_ERROR"
+TIMEOUT_MARKER = "CAO_CLAUDE_CODE_TIMEOUT"
 
 # Match markers as full lines.
 IDLE_LINE_PATTERN = rf"^{re.escape(IDLE_MARKER)}$"
 IDLE_AT_END_PATTERN = rf"(?:{IDLE_LINE_PATTERN})\s*\Z"
 DONE_LINE_PATTERN = rf"^{re.escape(DONE_MARKER)}$"
 ERROR_LINE_PATTERN = rf"^{re.escape(ERROR_MARKER)}$"
+TIMEOUT_LINE_PATTERN = rf"^{re.escape(TIMEOUT_MARKER)}$"
 
 # Best-effort detection when the CLI cannot proceed without user intervention.
 # This includes both "needs interactive auth" (login/setup-token) and "account blocked" states
@@ -125,6 +127,9 @@ class ClaudeCodeProvider(BaseProvider):
 
         extra_args = self._extra_print_args()
 
+        if "--permission-mode" not in extra_args:
+            parts.extend(["--permission-mode", "plan"])
+
         # Disable built-in tools by default to avoid permission prompts. Users can override via
         # CAO_CLAUDE_CODE_PRINT_ARGS="--tools default --permission-mode dontAsk", etc.
         if "--tools" not in extra_args:
@@ -183,12 +188,15 @@ class ClaudeCodeProvider(BaseProvider):
         prompt_path.write_text(message, encoding="utf-8", errors="strict")
 
         claude_cmd = self._build_claude_print_command()
+        run_timeout_s = float(os.getenv("CAO_CLAUDE_CODE_RUN_TIMEOUT", "120"))
+        kill_after_s = float(os.getenv("CAO_CLAUDE_CODE_KILL_AFTER", "5"))
 
         # Feed prompt via stdin (claude -p supports pipes), capture output to file, and
         # append stable markers for status detection.
         run_cmd = (
             f"rm -f {shlex.quote(str(out_path))} ; "
-            f"cat {shlex.quote(str(prompt_path))} | {claude_cmd} "
+            f"cat {shlex.quote(str(prompt_path))} | "
+            f"timeout --signal=TERM --kill-after={kill_after_s:g}s {run_timeout_s:g}s {claude_cmd} "
             f"> {shlex.quote(str(out_path))} 2>&1"
         )
 
@@ -196,6 +204,7 @@ class ClaudeCodeProvider(BaseProvider):
             " ; rc=$? ; "
             f"rm -f {shlex.quote(str(prompt_path))} ; "
             f'if [ "$rc" -eq 0 ]; then echo {shlex.quote(DONE_MARKER)} ; '
+            f'elif [ "$rc" -eq 124 ]; then echo {shlex.quote(TIMEOUT_MARKER)} ; '
             f"else echo {shlex.quote(ERROR_MARKER)} ; fi ; "
             f"echo {shlex.quote(IDLE_MARKER)}"
         )
@@ -215,11 +224,26 @@ class ClaudeCodeProvider(BaseProvider):
         if re.search(WAITING_PROMPT_PATTERN, tail_output, re.IGNORECASE | re.MULTILINE):
             return TerminalStatus.WAITING_USER_ANSWER
 
+        # The one-shot command redirects Claude output to file. If the CLI has already emitted a
+        # waiting/auth signal there, surface WAITING immediately even before marker lines appear.
+        try:
+            if self._last_message_path.exists():
+                last_text = self._last_message_path.read_text(encoding="utf-8", errors="replace")
+                last_text = re.sub(ANSI_CODE_PATTERN, "", last_text)
+                if re.search(WAITING_PROMPT_PATTERN, last_text, re.IGNORECASE | re.MULTILINE):
+                    return TerminalStatus.WAITING_USER_ANSWER
+        except Exception:
+            pass
+
         has_idle_at_end = bool(
             re.search(IDLE_AT_END_PATTERN, clean_output, re.MULTILINE | re.DOTALL)
         )
         if not has_idle_at_end:
             return TerminalStatus.PROCESSING
+
+        if re.search(TIMEOUT_LINE_PATTERN, clean_output, re.MULTILINE):
+            # Timeouts are commonly due interactive auth/setup blockers in non-interactive runs.
+            return TerminalStatus.WAITING_USER_ANSWER
 
         if re.search(ERROR_LINE_PATTERN, clean_output, re.MULTILINE):
             # If the one-shot run failed due to auth/setup, treat it as WAITING so callers can
@@ -250,7 +274,7 @@ class ClaudeCodeProvider(BaseProvider):
             raise ValueError("No Claude Code response found - output file missing")
 
         data = path.read_text(encoding="utf-8", errors="replace")
-        data = re.sub(ANSI_CODE_PATTERN, "", data).strip()
+        data = re.sub(ANSI_CODE_PATTERN, "", data).replace("\u200b", "").strip()
         if not data:
             raise ValueError("Empty Claude Code response - output file was empty")
 

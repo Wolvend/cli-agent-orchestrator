@@ -45,30 +45,28 @@ class TestGeminiProviderInitialization:
     @patch("cli_agent_orchestrator.providers.gemini.wait_until_status")
     @patch("cli_agent_orchestrator.providers.gemini.wait_for_shell")
     @patch("cli_agent_orchestrator.providers.gemini.tmux_client")
-    def test_initialize_waiting_user_answer_ok(self, mock_tmux, mock_wait_shell, mock_wait_status):
-        mock_wait_shell.return_value = True
-        mock_wait_status.return_value = False
-
-        provider = GeminiProvider("test1234", "test-session", "window-0", None)
-
-        with patch.object(provider, "get_status", return_value=TerminalStatus.WAITING_USER_ANSWER):
-            result = provider.initialize()
-
-        assert result is True
-
-    @patch("cli_agent_orchestrator.providers.gemini.wait_until_status")
-    @patch("cli_agent_orchestrator.providers.gemini.wait_for_shell")
-    @patch("cli_agent_orchestrator.providers.gemini.tmux_client")
     def test_initialize_timeout_raises(self, mock_tmux, mock_wait_shell, mock_wait_status):
         mock_wait_shell.return_value = True
         mock_wait_status.return_value = False
 
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
 
-        with patch.object(provider, "get_status", return_value=TerminalStatus.PROCESSING):
-            with pytest.raises(TimeoutError, match="Gemini initialization timed out"):
-                provider.initialize()
+        with pytest.raises(TimeoutError, match="Gemini shell initialization timed out"):
+            provider.initialize()
 
+    @patch("cli_agent_orchestrator.providers.gemini.wait_until_status")
+    @patch("cli_agent_orchestrator.providers.gemini.wait_for_shell")
+    @patch("cli_agent_orchestrator.providers.gemini.tmux_client")
+    def test_initialize_uses_shell_idle_timeout(self, mock_tmux, mock_wait_shell, mock_wait_status):
+        mock_wait_shell.return_value = True
+        mock_wait_status.return_value = True
+
+        provider = GeminiProvider("test1234", "test-session", "window-0", None)
+        result = provider.initialize()
+
+        assert result is True
+        _, kwargs = mock_wait_status.call_args
+        assert kwargs["timeout"] == 10.0
 
 class TestGeminiProviderStatusDetection:
     @patch("cli_agent_orchestrator.providers.gemini.tmux_client")
@@ -131,6 +129,7 @@ class TestGeminiProviderMessageExtraction:
         output = load_fixture("gemini_completed_output.txt")
 
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
+        provider._last_message_path.write_text(output, encoding="utf-8")
         message = provider.extract_last_message_from_script(output)
 
         assert "2+2 is 4" in message
@@ -139,14 +138,15 @@ class TestGeminiProviderMessageExtraction:
         output = "No assistant marker here"
 
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
+        provider._last_message_path.write_text(output, encoding="utf-8")
 
-        with pytest.raises(ValueError, match="No Gemini response found"):
-            provider.extract_last_message_from_script(output)
+        assert provider.extract_last_message_from_script(output) == output
 
     def test_extract_last_message_empty_response(self):
         output = "Model: \nType your message or @path/to/file"
 
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
+        provider._last_message_path.write_text(output, encoding="utf-8")
 
         with pytest.raises(ValueError, match="Empty Gemini response"):
             provider.extract_last_message_from_script(output)
@@ -155,11 +155,11 @@ class TestGeminiProviderMessageExtraction:
 class TestGeminiProviderMisc:
     def test_get_idle_pattern_for_log(self):
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
-        assert provider.get_idle_pattern_for_log() == "Type your message"
+        assert provider.get_idle_pattern_for_log() == "CAO_GEMINI_IDLE"
 
     def test_exit_cli(self):
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
-        assert provider.exit_cli() == "/quit"
+        assert provider.exit_cli() == "exit"
 
     def test_cleanup(self):
         provider = GeminiProvider("test1234", "test-session", "window-0", None)
